@@ -1,0 +1,13 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: driver-producer-service
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVER:kafka:29092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.type.mapping: driverLocation:com.example.driverproducer.dto.DriverLocationDTO

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Location Tracker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { width: 80%; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        #location-list { list-style: none; padding: 0; }
+        .location-item { background: #e9ecef; margin: 10px 0; padding: 15px; border-left: 5px solid #007bff; border-radius: 4px; }
+        .driver-id { font-weight: bold; color: #007bff; }
+        .coords { color: #666; }
+        .time { font-size: 0.8em; color: #999; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Driver Live Location Tracker</h1>
+        <div id="status">Connecting...</div>
+
+        <div style="margin: 12px 0; display:flex; gap:8px; align-items:center;">
+            <label for="driverIdInput">Driver ID:</label>
+            <input id="driverIdInput" type="text" placeholder="driver1" />
+            <button id="subscribeBtn">Subscribe Driver</button>
+            <button id="unsubscribeBtn" disabled>Unsubscribe</button>
+            <div id="driver-sub-status" style="margin-left:12px;color:#666">Not subscribed</div>
+        </div>
+
+        <h3>Per-driver Stream</h3>
+        <div id="driver-stream" style="margin-bottom:12px">
+            <ul id="driver-location-list" style="list-style:none;padding:0;margin:0"></ul>
+        </div>
+
+        <h3>Global Stream (all drivers)</h3>
+        <div id="location-list">
+            <!-- Updates will appear here -->
+        </div>
+    </div>
+
+    <script>
+        const stompClient = Stomp.over(new SockJS('http://localhost:8082/ws-location'));
+        const locationList = document.getElementById('location-list');
+        const statusDiv = document.getElementById('status');
+
+        stompClient.connect({}, function (frame) {
+            statusDiv.innerText = 'Connected: ' + frame;
+            statusDiv.style.color = 'green';
+
+            stompClient.subscribe('/topic/driver-locations', function (message) {
+                const location = JSON.parse(message.body);
+                updateUI(location);
+            });
+        }, function (error) {
+            statusDiv.innerText = 'Error: ' + error;
+            statusDiv.style.color = 'red';
+        });
+        // Per-driver subscription state
+        let driverSubscription = null;
+        const subscribeBtn = document.getElementById('subscribeBtn');
+        const unsubscribeBtn = document.getElementById('unsubscribeBtn');
+        const driverIdInput = document.getElementById('driverIdInput');
+        const driverSubStatus = document.getElementById('driver-sub-status');
+        const driverLocationList = document.getElementById('driver-location-list');
+
+        subscribeBtn.addEventListener('click', function () {
+            const driverId = driverIdInput.value && driverIdInput.value.trim();
+            if (!driverId) return alert('Enter a driverId to subscribe');
+            if (driverSubscription) {
+                driverSubscription.unsubscribe();
+            }
+            const topic = '/topic/driver-location/' + driverId;
+            driverSubscription = stompClient.subscribe(topic, function (message) {
+                const location = JSON.parse(message.body);
+                updateDriverUI(location);
+            });
+            driverSubStatus.innerText = 'Subscribed to ' + driverId;
+            unsubscribeBtn.disabled = false;
+        });
+
+        unsubscribeBtn.addEventListener('click', function () {
+            if (driverSubscription) {
+                try { driverSubscription.unsubscribe(); } catch (e) { /* ignore */ }
+                driverSubscription = null;
+            }
+            driverSubStatus.innerText = 'Not subscribed';
+            unsubscribeBtn.disabled = true;
+        });
+
+        function updateUI(location) {
+            // Create a new list item for every update so history is visible
+            const item = document.createElement('li');
+            item.className = 'location-item';
+
+            item.innerHTML = `
+                <div class="driver-id">Driver: ${location.driverId}</div>
+                <div class="coords">Lat: ${location.latitude}, Lng: ${location.longitude}</div>
+                <div class="time">Last Update: ${new Date(location.timestamp).toLocaleTimeString()}</div>
+            `;
+
+            // Prepend so newest updates appear on top
+            locationList.prepend(item);
+
+            // Optional: keep list bounded to last 200 entries to avoid memory bloat
+            const maxItems = 200;
+            while (locationList.children.length > maxItems) {
+                locationList.removeChild(locationList.lastChild);
+            }
+        }
+
+        function updateDriverUI(location) {
+            const item = document.createElement('li');
+            item.className = 'location-item';
+            item.innerHTML = `
+                <div class="driver-id">Driver: ${location.driverId}</div>
+                <div class="coords">Lat: ${location.latitude}, Lng: ${location.longitude}</div>
+                <div class="time">Last Update: ${new Date(location.timestamp).toLocaleTimeString()}</div>
+            `;
+            driverLocationList.prepend(item);
+
+            // Limit per-driver list size
+            const maxDriverItems = 200;
+            while (driverLocationList.children.length > maxDriverItems) {
+                driverLocationList.removeChild(driverLocationList.lastChild);
+            }
+        }
+    </script>
+</body>
+</html>

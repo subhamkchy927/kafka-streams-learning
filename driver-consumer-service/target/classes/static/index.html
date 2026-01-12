@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Location Tracker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { width: 80%; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        #location-list { list-style: none; padding: 0; }
+        .location-item { background: #e9ecef; margin: 10px 0; padding: 15px; border-left: 5px solid #007bff; border-radius: 4px; }
+        .driver-id { font-weight: bold; color: #007bff; }
+        .coords { color: #666; }
+        .time { font-size: 0.8em; color: #999; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Driver Live Location Tracker</h1>
+        <div id="status">Connecting...</div>
+        <div id="location-list">
+            <!-- Updates will appear here -->
+        </div>
+    </div>
+
+    <script>
+        const stompClient = Stomp.over(new SockJS('http://localhost:8082/ws-location'));
+        const locationList = document.getElementById('location-list');
+        const statusDiv = document.getElementById('status');
+
+        stompClient.connect({}, function (frame) {
+            statusDiv.innerText = 'Connected: ' + frame;
+            statusDiv.style.color = 'green';
+
+            stompClient.subscribe('/topic/driver-locations', function (message) {
+                const location = JSON.parse(message.body);
+                updateUI(location);
+            });
+        }, function (error) {
+            statusDiv.innerText = 'Error: ' + error;
+            statusDiv.style.color = 'red';
+        });
+
+        function updateUI(location) {
+            const id = `driver-${location.driverId}`;
+            let item = document.getElementById(id);
+            
+            if (!item) {
+                item = document.createElement('li');
+                item.id = id;
+                item.className = 'location-item';
+                locationList.prepend(item);
+            }
+
+            item.innerHTML = `
+                <div class="driver-id">Driver: ${location.driverId}</div>
+                <div class="coords">Lat: ${location.latitude}, Lng: ${location.longitude}</div>
+                <div class="time">Last Update: ${new Date(location.timestamp).toLocaleTimeString()}</div>
+            `;
+        }
+    </script>
+</body>
+</html>
